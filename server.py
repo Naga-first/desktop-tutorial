@@ -3,27 +3,25 @@ import threading
 import os
 import json
 
-# File to store user credentials
+
 USER_CREDENTIALS_FILE = "users.json"
 
 def load_users():
-    """Load users from a JSON file."""
     if os.path.exists(USER_CREDENTIALS_FILE):
         with open(USER_CREDENTIALS_FILE, 'r') as f:
             return json.load(f)
     return {}
 
 def save_users(users):
-    """Save users to a JSON file."""
     with open(USER_CREDENTIALS_FILE, 'w') as f:
         json.dump(users, f)
 
 users = load_users()
 
-host = "::"  # IPv6 address for listening on all interfaces
+host = "::"  
 port = 55555
 
-server = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)  # Use IPv6
+server = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)  
 server.bind((host, port))
 server.listen()
 
@@ -31,7 +29,6 @@ clients = []
 nicknames = []
 
 def broadcast(message, sender=None):
-    """Broadcast message to all clients except sender."""
     for client in clients:
         if client != sender:
             try:
@@ -46,7 +43,6 @@ def broadcast(message, sender=None):
                     client.close()
 
 def handle(client):
-    """Handle communication with a client."""
     while True:
         try:
             message = client.recv(1024).decode('ascii')
@@ -73,7 +69,6 @@ def handle(client):
                 break
 
 def authenticate(client):
-    """Authenticate the user by prompting for username and password."""
     while True:
         client.send("LOGIN or REGISTER?".encode('ascii'))
         choice = client.recv(1024).decode('ascii').strip().upper()
@@ -111,7 +106,6 @@ def authenticate(client):
             client.send("Invalid choice. Please type LOGIN or REGISTER.".encode('ascii'))
 
 def receive():
-    """Accept client connections and start a thread for each client."""
     print(f"Server is running and listening on [{host}]:{port}...")
     while True:
         client, address = server.accept()
