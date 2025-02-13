@@ -18,10 +18,10 @@ def save_users(users):
 
 users = load_users()
 
-host = "::"  
+host = "0.0.0.0"  
 port = 55555
 
-server = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)  
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
 server.bind((host, port))
 server.listen()
 
@@ -70,40 +70,43 @@ def handle(client):
 
 def authenticate(client):
     while True:
-        client.send("LOGIN or REGISTER?".encode('ascii'))
-        choice = client.recv(1024).decode('ascii').strip().upper()
+        try:
+            client.send("LOGIN or REGISTER?".encode('ascii'))
+            choice = client.recv(1024).decode('ascii').strip().upper()
 
-        if choice == "REGISTER":
-            client.send("Enter a new username:".encode('ascii'))
-            username = client.recv(1024).decode('ascii').strip()
+            if choice == "REGISTER":
+                client.send("Enter a new username:".encode('ascii'))
+                username = client.recv(1024).decode('ascii').strip()
 
-            if username in users:
-                client.send("Username already exists. Try again.".encode('ascii'))
-            else:
-                client.send("Enter a new password:".encode('ascii'))
-                password = client.recv(1024).decode('ascii').strip()
-                users[username] = password
-                save_users(users)
-                client.send("Registration successful! Please login.".encode('ascii'))
-                continue
-
-        elif choice == "LOGIN":
-            client.send("Enter your username:".encode('ascii'))
-            username = client.recv(1024).decode('ascii').strip()
-
-            if username not in users:
-                client.send("Username not found. Try again.".encode('ascii'))
-            else:
-                client.send("Enter your password:".encode('ascii'))
-                password = client.recv(1024).decode('ascii').strip()
-
-                if users[username] == password:
-                    client.send("Login successful!".encode('ascii'))
-                    return username
+                if username in users:
+                    client.send("Username already exists. Try again.".encode('ascii'))
                 else:
-                    client.send("Incorrect password. Try again.".encode('ascii'))
-        else:
-            client.send("Invalid choice. Please type LOGIN or REGISTER.".encode('ascii'))
+                    client.send("Enter a new password:".encode('ascii'))
+                    password = client.recv(1024).decode('ascii').strip()
+                    users[username] = password
+                    save_users(users)
+                    client.send("Registration successful! Please login.".encode('ascii'))
+                    continue
+
+            elif choice == "LOGIN":
+                client.send("Enter your username:".encode('ascii'))
+                username = client.recv(1024).decode('ascii').strip()
+
+                if username not in users:
+                    client.send("Username not found. Try again.".encode('ascii'))
+                else:
+                    client.send("Enter your password:".encode('ascii'))
+                    password = client.recv(1024).decode('ascii').strip()
+
+                    if users[username] == password:
+                        client.send("Login successful!".encode('ascii'))
+                        return username
+                    else:
+                        client.send("Incorrect password. Try again.".encode('ascii'))
+            else:
+                client.send("Invalid choice. Please type LOGIN or REGISTER.".encode('ascii'))
+        except:
+            pass
 
 def receive():
     print(f"Server is running and listening on [{host}]:{port}...")
