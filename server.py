@@ -1,7 +1,8 @@
-import asyncio
-import websockets
-import json
+import socket
+import threading
 import os
+import json
+
 
 USER_CREDENTIALS_FILE = "users.json"
 
@@ -11,88 +12,122 @@ def load_users():
             return json.load(f)
     return {}
 
-
 def save_users(users):
     with open(USER_CREDENTIALS_FILE, 'w') as f:
         json.dump(users, f)
 
 users = load_users()
-clients = {} 
 
-async def authenticate(websocket):
-    await websocket.send("LOGIN or REGISTER?")
-    choice = await websocket.recv()
-    
-    if choice.upper() == "REGISTER":
-        await websocket.send("Enter a new username:")
-        username = await websocket.recv()
-        
-        if username in users:
-            await websocket.send("Username already exists. Try again.")
-            return None
-        else:
-            await websocket.send("Enter a new password:")
-            password = await websocket.recv()
-            users[username] = password
-            save_users(users)
-            await websocket.send("Registration successful! Please login.")
-            return await authenticate(websocket) 
+host = "0.0.0.0"  
+port = 55555
 
-    elif choice.upper() == "LOGIN":
-        await websocket.send("Enter your username:")
-        username = await websocket.recv()
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
+server.bind((host, port))
+server.listen()
 
-        if username not in users:
-            await websocket.send("Username not found. Try again.")
-            return None
+clients = []
+nicknames = []
 
-        await websocket.send("Enter your password:")
-        password = await websocket.recv()
-
-        if users[username] == password:
-            await websocket.send("Login successful!")
-            return username
-        else:
-            await websocket.send("Incorrect password. Try again.")
-            return None
-    else:
-        await websocket.send("Invalid choice. Type LOGIN or REGISTER.")
-        return None
-
-async def broadcast(message, sender=None):
-    for client in clients.values():
+def broadcast(message, sender=None):
+    for client in clients:
         if client != sender:
             try:
-                await client.send(message)
+                client.send(message)
             except:
-                continue
+                if client in clients:
+                    index = clients.index(client)
+                    nickname = nicknames[index]
+                    clients.remove(client)
+                    nicknames.remove(nickname)
+                    print(f"Disconnected: {nickname}")
+                    client.close()
 
-async def handle_client(websocket, path):
-    username = await authenticate(websocket)
-    if not username:
-        await websocket.close()
-        return
-
-    clients[username] = websocket
-    await broadcast(f"{username} joined the chat!")
-
-    try:
-        async for message in websocket:
+def handle(client):
+    while True:
+        try:
+            message = client.recv(1024).decode('ascii')
             if message.strip().upper() == "EXIT":
+                index = clients.index(client)
+                nickname = nicknames[index]
+                broadcast(f"{nickname} has left the chat.".encode('ascii'))
+                print(f"{nickname} has disconnected.")
+                clients.remove(client)
+                nicknames.remove(nickname)
+                client.close()
                 break
             else:
-                await broadcast(f"{username}: {message}", sender=websocket)
-    except:
-        pass
-    finally:
-        del clients[username]
-        await broadcast(f"{username} has left the chat.")
-        await websocket.close()
+                broadcast(f"{nicknames[clients.index(client)]}: {message}".encode('ascii'), sender=client)
+        except:
+            if client in clients:
+                index = clients.index(client)
+                nickname = nicknames[index]
+                broadcast(f"{nickname} has left the chat.".encode('ascii'))
+                print(f"{nickname} has disconnected unexpectedly.")
+                clients.remove(client)
+                nicknames.remove(nickname)
+                client.close()
+                break
 
-async def main():
-    server = await websockets.serve(handle_client, "0.0.0.0", 55555)
-    print("WebSocket server running on ws://0.0.0.0:55555")
-    await server.wait_closed()
+def authenticate(client):
+    while True:
+        try:
+            client.send("LOGIN or REGISTER?".encode('ascii'))
+            choice = client.recv(1024).decode('ascii').strip().upper()
+
+            if choice == "REGISTER":
+                client.send("Enter a new username:".encode('ascii'))
+                username = client.recv(1024).decode('ascii').strip()
+
+                if username in users:
+                    client.send("Username already exists. Try again.".encode('ascii'))
+                else:
+                    client.send("Enter a new password:".encode('ascii'))
+                    password = client.recv(1024).decode('ascii').strip()
+                    users[username] = password
+                    save_users(users)
+                    client.send("Registration successful! Please login.".encode('ascii'))
+                    continue
+
+            elif choice == "LOGIN":
+                client.send("Enter your username:".encode('ascii'))
+                username = client.recv(1024).decode('ascii').strip()
+
+                if username not in users:
+                    client.send("Username not found. Try again.".encode('ascii'))
+                else:
+                    client.send("Enter your password:".encode('ascii'))
+                    password = client.recv(1024).decode('ascii').strip()
+
+                    if users[username] == password:
+                        client.send("Login successful!".encode('ascii'))
+                        return username
+                    else:
+                        client.send("Incorrect password. Try again.".encode('ascii'))
+            else:
+                client.send("Invalid choice. Please type LOGIN or REGISTER.".encode('ascii'))
+        except:
+            pass
+
+def receive():
+    print(f"Server is running and listening on [{host}]:{port}...")
+    while True:
+        client, address = server.accept()
+        print(f"Connected with {str(address)}")
+
+        nickname = authenticate(client)
+        nicknames.append(nickname)
+        clients.append(client)
+
+        print(f"Nickname is {nickname}")
+        broadcast(f"{nickname} joined the chat!".encode('ascii'))
+        client.send('Connected to the server!'.encode('ascii'))
+
+        thread = threading.Thread(target=handle, args=(client,))
+        thread.start()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        receive()
+    except KeyboardInterrupt:
+        print("\nShutting down the server.")
+        server.close()
